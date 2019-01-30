@@ -1,0 +1,7 @@
+[package]
+name = "fs-cms"
+version = "0.1.0"
+authors = ["artem <tematibr@gmail.com>"]
+edition = "2018"
+
+[dependencies]
