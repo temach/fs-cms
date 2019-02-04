@@ -7,4 +7,5 @@ edition = "2018"
 [dependencies]
 argparse = "0.2.2"
 tera = "0.11.20"
+walkdir = "2.2.7"
 
