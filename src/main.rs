@@ -1,11 +1,11 @@
-use std::io::{Write};
-use std::error::Error;
-use std::io;
 use std::env;
 use std::fs;
+use std::io;
+use std::io::Write;
+use std::path::Path;
 
 extern crate argparse;
-use argparse::{ArgumentParser, StoreTrue, Store};
+use argparse::{ArgumentParser, Store, StoreTrue};
 
 extern crate tera;
 use tera::{Context, Tera};
@@ -13,53 +13,103 @@ use tera::{Context, Tera};
 extern crate walkdir;
 use walkdir::WalkDir;
 
-enum TemplateFilesErrors {
-    EntryInvalid,
-    NothingFound,
-}
+type FscmsRes<T> = Result<T, String>;
 
-fn plugin_txt(path : & str) -> String {
-
-}
-
-fn plugin_png(path : & str) -> String {
-
-}
-
-
-fn render_artifact_to_html(path : &str) -> String {
-    match path.extension() {
-        "txt" => plugin_txt(path),
-        "png" => plugin_png(path),
+fn plugin_txt(path: &str) -> FscmsRes<String> {
+    match fs::read_to_string(path) {
+        Ok(contents) => Ok(contents),
+        Err(error_desc) => Err(format!(
+            "Plugin could not open file {:?}, because of error: {:?}",
+            path, error_desc
+        )),
     }
 }
 
-#[no_mangle]
-fn find_artifact_files(input_dir : &str) -> Result<Vec<String>, io::Error> {
-    let mut artifact_paths = Vec::new();
+fn plugin_png(path: &str) -> FscmsRes<String> {
+    match fs::read_to_string(path) {
+        Ok(contents) => Ok(contents),
+        Err(error_desc) => Err(format!(
+            "Plugin could not open file {:?}, because of error: {:?}",
+            path, error_desc
+        )),
+    }
+}
 
-    for entry in WalkDir::new(input_dir).into_iter() {
-        let entry = entry?.path();
-        let fpath = entry.to_string_lossy();
-        if ! entry.is_file()
-            || fpath.contains("template") {
-            continue;
+fn render_artifact_to_html(path: &Path) -> FscmsRes<String> {
+    // check that file extension exitsts and is valid
+    let (ext, fpath) = match (path.extension().and_then(|e| e.to_str()), path.to_str()) {
+        // if we have extension and filepath ok, then proceed
+        (Some(art_ext), Some(art_path)) => (art_ext, art_path),
+        _ => {
+            return Err(format!(
+                "Artifact {:?}: bad path or file extension. Please use utf-8 characters and specify extensions for artifact files.",
+                path
+            ));
         }
-        artifact_paths.push(fpath.to_string());
+    };
+
+    // return the result of processing artifact with the plugin
+    match ext {
+        "txt" => plugin_txt(fpath),
+        "png" => plugin_png(fpath),
+        _ => Err(format!(
+            "Artifact {:?}: no plugin for extension {}.",
+            path, ext
+        )),
     }
-    Ok(artifact_paths)
 }
 
+type FileFilter = Fn(&str) -> bool;
 
-#[no_mangle]
-fn find_template_files(input_dir : &str) -> Result<Vec<String>, io::Error> {
-    let mut template_fpaths = Vec::new();
+fn filter_directory(input_dir &str, predicate : &FileFilter) -> FscmsRes<Vec<&Path>> {
+    let mut results = Vec::new();
 
-    for entry in WalkDir::new(input_dir).into_iter() {
-        let entry = entry?.path();
-        let fpath = entry.to_string_lossy();
-        if entry.is_file() && fpath.contains("template") && fpath.contains("html") {
-            template_fpaths.push(fpath.to_string());
+    for walkdir_result in WalkDir::new(input_dir).into_iter() {
+        // check that walkdir returned valid entry
+        let valid_entry = match walkdir_result {
+            Ok(entry) => entry,
+            Err(e) => {
+                return Err(format!(
+                    "Searching inside {}: directory entry {} is invalid due to error {}",
+                    input_dir, walkdir_result, e
+                ));
+            }
+        };
+
+        // convert walkdir entry to std::path::Path
+        let path = match valid_entry.path() {
+            Ok(p) => p,
+            Err(e) => {
+                return Err(format!(
+                    "Searching inside {}: directory entry {} is not a path due to error {}",
+                    input_dir, valid_entry, e
+                ));
+            }
+        };
+
+        let fpath = path.to_string_lossy();
+
+        // check that path passes the filter
+        if predicate.call(fpath) {
+            results.push(&path);
+        }
+
+        results.push(&path);
+    }
+
+    // return vector of paths
+    Ok(results)
+}
+
+fn find_artifact_files(path: Path) -> bool {
+    let fpath = path.to_string_lossy();
+    return path.is_file() && (! fpath.contains("template"))
+}
+
+fn find_template_files(path: Path) -> bool {
+        let fpath = path.to_string_lossy();
+        if path.is_file() && fpath.contains("template") && fpath.contains("html") {
+            template_fpaths.push(&path);
         }
     }
     Ok(template_fpaths)
@@ -67,7 +117,7 @@ fn find_template_files(input_dir : &str) -> Result<Vec<String>, io::Error> {
 
 fn main() {
     let mut verbose = false;
-    let mut input_dir : String = "./examples/basic/input".to_string();
+    let mut input_dir: String = "./examples/basic/input".to_string();
     let mut output_dir = "./examples/basic/output".to_string();
 
     {
@@ -75,24 +125,31 @@ fn main() {
         let mut ap = ArgumentParser::new();
         ap.set_description("Parse site directory and build a static site from it.");
         ap.refer(&mut verbose)
-            .add_option(&["-v", "--verbose"], StoreTrue,
-                        "Be verbose");
-        ap.refer(&mut input_dir)
-            .add_option(&["--in"], Store,
-                        "Path to input directory with data for website. By default a path from examples");
-        ap.refer(&mut output_dir)
-            .add_option(&["--out"], Store,
-                        "Path to output directory, serve content from there. By default a path from examples");
+            .add_option(&["-v", "--verbose"], StoreTrue, "Be verbose");
+        ap.refer(&mut input_dir).add_option(
+            &["--in"],
+            Store,
+            "Path to input directory with data for website. By default a path from examples",
+        );
+        ap.refer(&mut output_dir).add_option(
+            &["--out"],
+            Store,
+            "Path to output directory, serve content from there. By default a path from examples",
+        );
         ap.parse_args_or_exit();
     }
 
     if verbose {
-        println!("Running in {:?}.\nStarting site build.", env::current_dir().expect("Could not get current working directory."));
+        println!(
+            "Running in {:?}.\nStarting site build.",
+            env::current_dir().expect("Could not get current working directory.")
+        );
     }
 
     // let paths = fs::read_dir(&input_dir).expect( &format!("Could not find input directory {}", input_dir) );
 
-    let tpaths : Vec<_> = find_template_files(&input_dir).expect("Error while finding templates, did not return a valid vector");
+    let tpaths: Vec<_> = find_template_files(&input_dir)
+        .expect("Error while finding templates, did not return a valid vector");
 
     // for path in paths {
     //     println!("Found input file: {}", path.expect("could not read name of one of the files in the input directory").path().display());
@@ -102,7 +159,8 @@ fn main() {
         println!("Found template file: {}", path);
     }
 
-    let apaths : Vec<_> = find_artifact_files(&input_dir).expect("Error while finding artifacts, did not return a valid vector");
+    let apaths: Vec<_> = find_artifact_files(&input_dir)
+        .expect("Error while finding artifacts, did not return a valid vector");
     for path in apaths {
         println!("Found artifact file: {}", path);
     }
@@ -130,5 +188,4 @@ fn main() {
     // write!(output, "{}", rendered);
 
     // println!("{}", rendered);
-
 }
