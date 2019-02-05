@@ -61,7 +61,7 @@ fn render_artifact_to_html(path: &Path) -> FscmsRes<String> {
 
 type FileFilter = Fn(&str) -> bool;
 
-fn filter_directory(input_dir &str, predicate : &FileFilter) -> FscmsRes<Vec<&Path>> {
+fn get_working_paths(input_dir: &str) -> FscmsRes<Vec<&Path>> {
     let mut results = Vec::new();
 
     for walkdir_result in WalkDir::new(input_dir).into_iter() {
@@ -87,13 +87,6 @@ fn filter_directory(input_dir &str, predicate : &FileFilter) -> FscmsRes<Vec<&Pa
             }
         };
 
-        let fpath = path.to_string_lossy();
-
-        // check that path passes the filter
-        if predicate.call(fpath) {
-            results.push(&path);
-        }
-
         results.push(&path);
     }
 
@@ -101,21 +94,19 @@ fn filter_directory(input_dir &str, predicate : &FileFilter) -> FscmsRes<Vec<&Pa
     Ok(results)
 }
 
+
 fn find_artifact_files(path: Path) -> bool {
     let fpath = path.to_string_lossy();
-    return path.is_file() && (! fpath.contains("template"))
+    return path.is_file() && (!fpath.contains("template"));
 }
 
 fn find_template_files(path: Path) -> bool {
-        let fpath = path.to_string_lossy();
-        if path.is_file() && fpath.contains("template") && fpath.contains("html") {
-            template_fpaths.push(&path);
-        }
-    }
-    Ok(template_fpaths)
+    let fpath = path.to_string_lossy();
+    return path.is_file() && fpath.contains("template") && fpath.contains("html");
 }
 
-fn main() {
+
+fn run() -> FscmsRes<()> {
     let mut verbose = false;
     let mut input_dir: String = "./examples/basic/input".to_string();
     let mut output_dir = "./examples/basic/output".to_string();
@@ -148,6 +139,8 @@ fn main() {
 
     // let paths = fs::read_dir(&input_dir).expect( &format!("Could not find input directory {}", input_dir) );
 
+    let working_paths = get_working_paths(&input_dir)?;
+    let tpaths = working_paths.
     let tpaths: Vec<_> = find_template_files(&input_dir)
         .expect("Error while finding templates, did not return a valid vector");
 
@@ -188,4 +181,15 @@ fn main() {
     // write!(output, "{}", rendered);
 
     // println!("{}", rendered);
+
+}
+
+fn main() {
+    std::process::exit(match run() {
+        Ok(_) => 0,
+        Err(err) => {
+            println!("Error: {:?}", err);
+            1
+        }
+    });
 }
