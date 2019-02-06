@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::io;
 use std::io::Write;
-use std::path::Path;
 
 extern crate argparse;
 use argparse::{ArgumentParser, Store, StoreTrue};
@@ -14,6 +13,13 @@ extern crate walkdir;
 use walkdir::WalkDir;
 
 type FscmsRes<T> = Result<T, String>;
+
+use std::path::Path;
+use std::path::PathBuf;
+
+fn example_unimplemented() -> bool {
+    unimplemented!();
+}
 
 fn plugin_txt(path: &str) -> FscmsRes<String> {
     match fs::read_to_string(path) {
@@ -42,7 +48,7 @@ fn render_artifact_to_html(path: &Path) -> FscmsRes<String> {
         (Some(art_ext), Some(art_path)) => (art_ext, art_path),
         _ => {
             return Err(format!(
-                "Artifact {:?}: bad path or file extension. Please use utf-8 characters and specify extensions for artifact files.",
+                "Artifact {:?}: bad file path or file extension. Please use utf-8 characters and specify extensions for artifact files.",
                 path
             ));
         }
@@ -53,58 +59,43 @@ fn render_artifact_to_html(path: &Path) -> FscmsRes<String> {
         "txt" => plugin_txt(fpath),
         "png" => plugin_png(fpath),
         _ => Err(format!(
-            "Artifact {:?}: no plugin for extension {}.",
+            "Artifact {:?}: no plugin found for file with extension {}.",
             path, ext
         )),
     }
 }
 
-type FileFilter = Fn(&str) -> bool;
-
-fn get_working_paths(input_dir: &str) -> FscmsRes<Vec<&Path>> {
+fn get_working_paths(input_dir: &str) -> FscmsRes<Vec<PathBuf>> {
     let mut results = Vec::new();
 
     for walkdir_result in WalkDir::new(input_dir).into_iter() {
         // check that walkdir returned valid entry
         let valid_entry = match walkdir_result {
-            Ok(entry) => entry,
-            Err(e) => {
+            Ok(good_result) => good_result,
+            Err(bad_result) => {
                 return Err(format!(
-                    "Searching inside {}: directory entry {} is invalid due to error {}",
-                    input_dir, walkdir_result, e
+                    "Searching inside {}: a directory entry is invalid {:#?}",
+                    input_dir, bad_result
                 ));
             }
         };
 
-        // convert walkdir entry to std::path::Path
-        let path = match valid_entry.path() {
-            Ok(p) => p,
-            Err(e) => {
-                return Err(format!(
-                    "Searching inside {}: directory entry {} is not a path due to error {}",
-                    input_dir, valid_entry, e
-                ));
-            }
-        };
-
-        results.push(&path);
+        results.push(valid_entry.into_path());
     }
 
     // return vector of paths
     Ok(results)
 }
 
-
-fn find_artifact_files(path: Path) -> bool {
+fn is_artifact_file(path: &Path) -> bool {
     let fpath = path.to_string_lossy();
     return path.is_file() && (!fpath.contains("template"));
 }
 
-fn find_template_files(path: Path) -> bool {
+fn is_template_file(path: &Path) -> bool {
     let fpath = path.to_string_lossy();
     return path.is_file() && fpath.contains("template") && fpath.contains("html");
 }
-
 
 fn run() -> FscmsRes<()> {
     let mut verbose = false;
@@ -137,25 +128,24 @@ fn run() -> FscmsRes<()> {
         );
     }
 
-    // let paths = fs::read_dir(&input_dir).expect( &format!("Could not find input directory {}", input_dir) );
-
     let working_paths = get_working_paths(&input_dir)?;
-    let tpaths = working_paths.
-    let tpaths: Vec<_> = find_template_files(&input_dir)
-        .expect("Error while finding templates, did not return a valid vector");
 
-    // for path in paths {
-    //     println!("Found input file: {}", path.expect("could not read name of one of the files in the input directory").path().display());
-    // }
+    let tpaths: Vec<PathBuf> = working_paths
+        .iter()
+        .filter(|&path| is_template_file(path))
+        .cloned()
+        .collect();
 
-    for path in tpaths {
-        println!("Found template file: {}", path);
-    }
+    let apaths: Vec<PathBuf> = working_paths
+        .iter()
+        .filter(|path| is_artifact_file(path))
+        .cloned()
+        .collect();
 
-    let apaths: Vec<_> = find_artifact_files(&input_dir)
-        .expect("Error while finding artifacts, did not return a valid vector");
-    for path in apaths {
-        println!("Found artifact file: {}", path);
+    if verbose {
+        println!("Explored paths: {:#?}", working_paths);
+        println!("Found artifacts: {:#?}", apaths);
+        println!("Found templates: {:#?}", tpaths);
     }
 
     // Use globbing
@@ -182,6 +172,7 @@ fn run() -> FscmsRes<()> {
 
     // println!("{}", rendered);
 
+    Ok(())
 }
 
 fn main() {
