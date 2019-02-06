@@ -19,7 +19,7 @@ Content management system for websites based on filesystem structure
     Maybe this is a pointless idea actually.
 
 -   Use CSS grid to specify layout of artifacts on page? See: https://gridbyexample.com/examples/
-    Should provide a couple of templates.
+    Should provide a couple of templates. Grid intro: https://www.smashingmagazine.com/2018/05/future-of-web-design/
 
 -   Should geenrate CSS classes from file names. See how SmallVistories does this. 
     For file my_photo_important.png they would split on "_" and generate 3 css classes:
