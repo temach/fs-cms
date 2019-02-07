@@ -32,3 +32,9 @@ Content management system for websites based on filesystem structure
     should be copy-pasted there?
 
 -   Ignore artifacts starting with an underscore or maybe its better to use underscore for system files?
+
+-   Great place to layout grid: https://www.layoutit.com/grid
+    Also might consider: https://github.com/sylvainpolletvillard/postcss-grid-kiss
+    The guy has the right idea that css grid currently is easier to write than to read and he
+    wants to reverse this. This is exactly my use case: users need to be able to read css
+    grid declaration and choose from templates! They are not expected to actually write them.
