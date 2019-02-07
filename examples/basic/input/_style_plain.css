@@ -1,0 +1,29 @@
+/* File with styles for the elements */
+
+body {
+        margin:40px auto;
+        max-width:1280px;
+        line-height:1.6;
+        font-size:18px;
+        color:#444;
+        padding:0 10px;
+}
+
+h1, h2, h3 {
+        line-height:1.2;
+}
+
+.artifact {
+        background-color: #444;
+        color: #fff;
+        border-radius: 5px;
+        padding: 20px;
+        margin: 7px;
+        font-size: 150%;
+        background-color: grey;
+}
+
+.artifact-debug {
+        /* Add this class to any div */
+}
+

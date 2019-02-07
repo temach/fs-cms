@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+        <head>
+                <meta charset="utf-8" />
+                <title>{{ page_title }}</title>
+        </head>
+
+        <style>
+        {{ page_layout }}
+
+        {{ page_style }}
+        </style>
+
+        <script>
+        {{ page_script }}
+        </script>
+
+        <body>
+
+                <!-- Artifacts with fixed layout -->
+                <div class="layout-grid-container">
+
+                        <div class="artifact layout-a">
+                                {{ artifacts.0 }}
+                        </div>
+                        <div class="artifact layout-b">
+                                {{ artifacts.1 }}
+                        </div>
+                        <div class="artifact layout-c">
+                                {{ artifacts.2 }}
+                        </div>
+                        <div class="artifact layout-d">
+                                {{ artifacts.3 }}
+                        </div>
+
+                </div>
+
+                <!-- If more artifacts, create extra slots with auto layout as needed. -->
+                {% if artifacts | length > 4 %}
+                <div class="layout-loop">
+                        {% for i in range(start=4, end=artifacts | length) %}
+                        <div class="artifact">
+                                {{ artifacts[i] }}
+                        </div>
+                        {% endfor %}
+                </div>
+                {% endif %}
+
+        </body>
+</html>
+

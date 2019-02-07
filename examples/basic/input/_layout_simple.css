@@ -1,0 +1,25 @@
+.layout-grid-container {
+  display: grid;
+  grid-gap: 1.2em;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr 1fr;
+  grid-template-areas: 
+        "a b b b"
+        ". . d d"
+        "c c d d" 
+        "c c . .";
+}
+
+.layout-a { grid-area: a; }
+.layout-b { grid-area: b; }
+.layout-c { grid-area: c; }
+.layout-d { grid-area: d; }
+
+.layout-loop {
+        /* layout_loop should always use generic and simple grid layout all
+         * the artifacts that dont fit into the fixed layout will be mashed
+         * together, so it better to keep this simple. Otherwise unexpected
+         * things may happen */
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+}
