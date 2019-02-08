@@ -13,14 +13,18 @@ h1, h2, h3 {
         line-height:1.2;
 }
 
+img {
+        min-width: 600px;
+}
+
 .artifact {
-        background-color: #444;
-        color: #fff;
+        /* background-color: #444; */
+        color: darkblue;
         border-radius: 5px;
         padding: 20px;
         margin: 7px;
         font-size: 150%;
-        background-color: grey;
+        /* background-color: grey; */
 }
 
 .artifact-debug {
