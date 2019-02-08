@@ -1,7 +1,5 @@
 use std::env;
 use std::fs;
-use std::io;
-use std::io::Write;
 
 extern crate argparse;
 use argparse::{ArgumentParser, Store, StoreTrue};
@@ -13,7 +11,6 @@ extern crate walkdir;
 use walkdir::WalkDir;
 
 type FscmsRes<T> = Result<T, String>;
-type Artifact = String;
 
 use std::path::Path;
 use std::path::PathBuf;
@@ -23,6 +20,8 @@ fn example_unimplemented() -> bool {
 }
 
 struct RenderInfo<'a> {
+    fstem: &'a str,
+    fext: &'a str,
     input_dir: &'a str,
     output_dir: &'a str,
     path: &'a str,
@@ -30,7 +29,7 @@ struct RenderInfo<'a> {
 
 const HTML_TEMPLATE_PLUGIN_TXT: &str = r#"<p>{{ content }}</p>"#;
 
-const HTML_TEMPLATE_PLUGIN_PNG: &str = r#"<img src=>{{ content }}</p>"#;
+const HTML_TEMPLATE_PLUGIN_PNG: &str = r#"<img src="{{ content }}"/>"#;
 
 type ArtifactPlugin = fn(&RenderInfo) -> FscmsRes<String>;
 
@@ -86,6 +85,7 @@ fn plugin_txt(ri: &RenderInfo) -> FscmsRes<String> {
     let key = "content";
     let value = fcontent;
     context.insert(key, &value);
+    // set tera auto-escape to true because we are putting user supplied text into HTML
     let html = match Tera::one_off(HTML_TEMPLATE_PLUGIN_TXT, &context, true) {
         Ok(value) => Ok(value),
         Err(tera_error) => {
@@ -100,7 +100,8 @@ fn plugin_txt(ri: &RenderInfo) -> FscmsRes<String> {
 }
 
 fn plugin_png(ri: &RenderInfo) -> FscmsRes<String> {
-    let fdata: Vec<u8> = match fs::read(ri.path) {
+    // read png image data
+    let png_data: Vec<u8> = match fs::read(ri.path) {
         Ok(contents) => contents,
         Err(error_desc) => {
             return Err(format!(
@@ -110,12 +111,15 @@ fn plugin_png(ri: &RenderInfo) -> FscmsRes<String> {
         }
     };
 
+    // name of file without directory path
+
     let mut context = Context::new();
     let key = "content";
-    let value = "";
+    let value = format!("./{}.{}", ri.fstem, ri.fext);
     context.insert(key, &value);
-    let html = match Tera::one_off(HTML_TEMPLATE_PLUGIN_TXT, &context, true) {
-        Ok(value) => Ok(value),
+    // set tera auto-escape to false because we are putting the os supplied path to png into HTML
+    let html = match Tera::one_off(HTML_TEMPLATE_PLUGIN_PNG, &context, false) {
+        Ok(value) => value,
         Err(tera_error) => {
             return Err(format!(
                 "Error in plugin_txt with artifact {:#?}. Tera render failed: {}",
@@ -124,7 +128,28 @@ fn plugin_png(ri: &RenderInfo) -> FscmsRes<String> {
         }
     };
 
-    return html;
+    // copy png data to output file
+    let os_output_path = format!("{}/{}.{}", ri.output_dir, ri.fstem, ri.fext);
+    if let Err(io_err) = fs::write(&os_output_path, png_data) {
+        return Err(format!("IO error when writing png output: {}", io_err));
+    };
+
+    return Ok(html);
+}
+
+fn plugin_html(ri: &RenderInfo) -> FscmsRes<String> {
+    let html_content: String = match fs::read_to_string(ri.path) {
+        Ok(contents) => contents,
+        Err(error_desc) => {
+            return Err(format!(
+                "Error: plugin could not read file {:?}, because of error: {:?}",
+                ri.path, error_desc
+            ))
+        }
+    };
+
+    // just return the html directly
+    return Ok(html_content);
 }
 
 fn get_plugin_for_artifact(path: &Path) -> FscmsRes<ArtifactPlugin> {
@@ -143,6 +168,7 @@ fn get_plugin_for_artifact(path: &Path) -> FscmsRes<ArtifactPlugin> {
     let selected_plugin = match fext {
         "txt" => plugin_txt,
         "png" => plugin_png,
+        "html" => plugin_html,
         _ => {
             return Err(format!(
                 "Artifact {:?}: no plugin found for file with extension {}.",
@@ -207,7 +233,7 @@ fn is_artifact_file(path: &Path) -> bool {
     return !is_system_file(path)
         && !fname.starts_with("_")
         && !fname.starts_with(".")
-        && (fext.contains("txt") || fext.contains("png") || fext.contains("jpeg"));
+        && (fext.contains("txt") || fext.contains("html") || fext.contains("png"));
 }
 
 fn is_system_file(path: &Path) -> bool {
@@ -286,8 +312,8 @@ fn validate_paths(workpaths: &Vec<PathBuf>) -> FscmsRes<bool> {
 
 fn run() -> FscmsRes<()> {
     let mut verbose = false;
-    let mut input_dir: String = "./examples/basic/input".to_string();
-    let mut output_dir = "./examples/basic/output".to_string();
+    let mut input_dir: String = "./examples/gallery/input".to_string();
+    let mut output_dir = "./examples/gallery/output".to_string();
 
     {
         // this block limits scope of borrows by ap.refer() method
@@ -363,10 +389,10 @@ fn run() -> FscmsRes<()> {
 
     // actually process all artifacts
     //
-    let tera_glob = format!("{}/*", input_dir);
+    let tera_glob = format!("{}/*template*.html", input_dir);
     let mut tera = tera::compile_templates!(&tera_glob);
 
-    // disable autoescaping completely
+    // disable tera autoescaping completely
     tera.autoescape_on(vec![]);
 
     println!("{:#?}", tera);
@@ -375,7 +401,13 @@ fn run() -> FscmsRes<()> {
 
     for art_path in artifacts.iter() {
         let plugin: ArtifactPlugin = get_plugin_for_artifact(art_path)?;
+
+        // unwrap guaranteed because input was sanitised in previous steps
+        let (art_stem, art_ext) = get_name_extension(art_path).unwrap();
+
         let ri = RenderInfo {
+            fstem: art_stem,
+            fext: art_ext,
             input_dir: &input_dir,
             output_dir: &output_dir,
             // unwrap guaranteed because input was sanitised in previous steps
@@ -421,33 +453,18 @@ fn run() -> FscmsRes<()> {
 
     if verbose {
         println!("Rendered main template:\n{}", html);
+        println!("Writing output to {}", output_dir);
     }
 
-    // for templ_path in
+    let out_index = PathBuf::from(format!("{}/{}", output_dir, "index.html"));
 
-    // Use globbing
-    //
-    // input_dir = input_dir.trim_end_matches('/').to_string();
-    // input_dir.push_str("/**/*");
-    // if verbose {
-    //     println!("input_dir: {}", &input_dir);
-    //     println!("output_dir: {}", &output_dir);
-    // }
+    if verbose {
+        println!("Output index file {}", out_index.to_string_lossy());
+    }
 
-    // let mut tera = tera::compile_templates!(&input_dir);
-
-    // let mut ctx = Context::new();
-    // ctx.insert("title", &"hello world!");
-    // ctx.insert("content", &LIPSUM);
-    // ctx.insert("todos", &vec!["buy milk", "walk the dog", "write about tera"]);
-
-    // let rendered = tera.render("index.html", &ctx).expect("Failed to render template");
-
-    // output_dir.push_str("/index.html");
-    // let mut output = File::create(output_dir).expect("Could not open output file");
-    // write!(output, "{}", rendered);
-
-    // println!("{}", rendered);
+    if let Err(io_err) = fs::write(out_index, html) {
+        return Err(format!("IO error when writing output: {}", io_err));
+    };
 
     Ok(())
 }
