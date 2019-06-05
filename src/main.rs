@@ -40,7 +40,7 @@ fn read_to_string(fpath: &str) -> FscmsRes<String> {
             return Err(format!(
                 "Error: plugin could not read file {:?}, because of error: {:?}",
                 fpath, error_desc
-            ))
+            ));
         }
     };
 
@@ -61,7 +61,7 @@ fn convert_to_rust_str(path: &Path) -> FscmsRes<&str> {
             return Err(format!(
                 "Error: could not get path for system file {:#?}",
                 path
-            ))
+            ));
         }
     };
 
@@ -75,7 +75,7 @@ fn plugin_txt(ri: &RenderInfo) -> FscmsRes<String> {
             return Err(format!(
                 "Error: plugin could not read file {:?}, because of error: {:?}",
                 ri.path, error_desc
-            ))
+            ));
         }
     };
 
@@ -92,7 +92,7 @@ fn plugin_txt(ri: &RenderInfo) -> FscmsRes<String> {
             return Err(format!(
                 "Error in plugin_txt with artifact {:#?}. Tera render failed: {}",
                 ri.path, tera_error
-            ))
+            ));
         }
     };
 
@@ -107,7 +107,7 @@ fn plugin_png(ri: &RenderInfo) -> FscmsRes<String> {
             return Err(format!(
                 "Error: plugin could not read file {:?}, because of error: {:?}",
                 ri.path, error_desc
-            ))
+            ));
         }
     };
 
@@ -124,7 +124,7 @@ fn plugin_png(ri: &RenderInfo) -> FscmsRes<String> {
             return Err(format!(
                 "Error in plugin_txt with artifact {:#?}. Tera render failed: {}",
                 ri.path, tera_error
-            ))
+            ));
         }
     };
 
@@ -144,7 +144,7 @@ fn plugin_html(ri: &RenderInfo) -> FscmsRes<String> {
             return Err(format!(
                 "Error: plugin could not read file {:?}, because of error: {:?}",
                 ri.path, error_desc
-            ))
+            ));
         }
     };
 
@@ -161,7 +161,7 @@ fn get_plugin_for_artifact(path: &Path) -> FscmsRes<ArtifactPlugin> {
             return Err(format!(
                 "Error: could not convert path {:#?} to rust utf-8 string.",
                 path
-            ))
+            ));
         }
     };
 
@@ -173,7 +173,7 @@ fn get_plugin_for_artifact(path: &Path) -> FscmsRes<ArtifactPlugin> {
             return Err(format!(
                 "Artifact {:?}: no plugin found for file with extension {}.",
                 path, fext
-            ))
+            ));
         }
     };
 
@@ -209,7 +209,7 @@ fn get_name_extension(path: &Path) -> FscmsRes<(&str, &str)> {
             return Err(format!(
                 "Error: could not extract file name or extension from path: {:#?}",
                 path
-            ))
+            ));
         }
     };
     let (fstem, fext) = match (fstem.to_str(), fext.to_str()) {
@@ -218,7 +218,7 @@ fn get_name_extension(path: &Path) -> FscmsRes<(&str, &str)> {
             return Err(format!(
                 "Error: could not convert os string to rust utf-8 string for path {:#?}",
                 path
-            ))
+            ));
         }
     };
 
@@ -393,6 +393,7 @@ fn run() -> FscmsRes<()> {
     let mut tera = tera::compile_templates!(&tera_glob);
 
     // disable tera autoescaping completely
+    // this is because when processing html artifacts, tey need to be inserted verbatim
     tera.autoescape_on(vec![]);
 
     println!("{:#?}", tera);
@@ -413,7 +414,7 @@ fn run() -> FscmsRes<()> {
             // unwrap guaranteed because input was sanitised in previous steps
             path: art_path.to_str().unwrap(),
         };
-        // the plugin is responsible for coping files, etc.
+        // each plugin is responsible for coping its files, etc.
         let html = plugin(&ri)?;
         rendered_artifacts.push(html);
     }
@@ -447,7 +448,7 @@ fn run() -> FscmsRes<()> {
             return Err(format!(
                 "Error: main tera render failed because {}",
                 tera_error
-            ))
+            ));
         }
     };
 
